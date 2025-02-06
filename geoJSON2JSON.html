@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeoJSON to JSON Converter</title>
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    label {
+      margin-top: 10px;
+    }
+    .container {
+      margin-top: 20px;
+    }
+    .field-selectors {
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1 class="text-center">GeoJSON to JSON Converter</h1>
+
+  <!-- Input for GeoJSON file -->
+  <div class="form-group">
+    <label for="geojsonFile">Upload GeoJSON File:</label>
+    <input type="file" class="form-control-file" id="geojsonFile" accept=".geojson">
+  </div>
+
+  <!-- Dynamic field selection -->
+  <div id="fieldSelectors" class="field-selectors"></div>
+  <button class="btn btn-primary" onclick="addFieldSelector()">Add Field</button>
+  <button class="btn btn-danger" onclick="removeFieldSelector()">Remove Field</button><br><br>
+
+  <!-- Option to exclude nulls -->
+  <div class="form-group">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="excludeNulls">
+      <label class="form-check-label" for="excludeNulls">Exclude Null Values</label>
+    </div>
+  </div>
+
+  <button class="btn btn-success" onclick="convertGeoJSON()">Convert GeoJSON</button>
+  <button class="btn btn-info" onclick="downloadJSON()">Download JSON</button>
+
+  <h2 class="mt-4">Output JSON:</h2>
+  <pre id="outputJson" class="bg-light p-3"></pre>
+</div>
+
+<script>
+  let geojsonData = null;
+  let fieldSelectors = [];
+  let resultJson = {};
+
+  // Function to handle file upload
+  document.getElementById('geojsonFile').addEventListener('change', handleFileUpload);
+
+  function handleFileUpload(event) {
+    const file = event.target.files[0];
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+      try {
+        geojsonData = JSON.parse(e.target.result);
+        alert("GeoJSON file loaded successfully!");
+        initializeFieldSelectors();
+      } catch (error) {
+        alert("Invalid GeoJSON file.");
+      }
+    };
+
+    reader.readAsText(file);
+  }
+
+  // Initialize the field selectors with only 1 field
+  function initializeFieldSelectors() {
+    const featureProperties = geojsonData.features[0].properties;
+
+    // Create field selectors based on the keys in the GeoJSON features' properties
+    const fields = Object.keys(featureProperties);
+    const container = document.getElementById('fieldSelectors');
+    container.innerHTML = ''; // Clear existing fields
+
+    if (fields.length > 0) {
+      createFieldSelector(fields[0]);
+    }
+  }
+
+  // Create a new field selection option
+  function createFieldSelector(field) {
+    const container = document.getElementById('fieldSelectors');
+    
+    const selector = document.createElement('select');
+    selector.className = 'form-control mb-2';
+    selector.id = `fieldSelector-${fieldSelectors.length}`;
+    
+    const fields = Object.keys(geojsonData.features[0].properties);
+    fields.forEach(field => {
+      const option = document.createElement('option');
+      option.value = field;
+      option.textContent = field;
+      selector.appendChild(option);
+    });
+
+    const fieldContainer = document.createElement('div');
+    fieldContainer.appendChild(selector);
+    container.appendChild(fieldContainer);
+    fieldSelectors.push(selector);
+  }
+
+  // Add a new field selection option
+  function addFieldSelector() {
+    const fields = Object.keys(geojsonData.features[0].properties);
+    if (fields.length > 0) {
+      createFieldSelector(fields[0]);
+    }
+  }
+
+  // Remove the last added field selection option
+  function removeFieldSelector() {
+    if (fieldSelectors.length > 0) {
+      const lastSelector = fieldSelectors.pop();
+      lastSelector.parentNode.remove(); // Remove the last field selector
+    }
+  }
+
+  // Convert GeoJSON to the desired JSON structure
+  function convertGeoJSON() {
+    const excludeNulls = document.getElementById('excludeNulls').checked;
+
+    const selectedFields = fieldSelectors.map(selector => selector.value);
+
+    // Initialize the result structure
+    resultJson = {};
+    selectedFields.forEach(field => {
+      resultJson[field] = [];
+    });
+
+    geojsonData.features.forEach(feature => {
+      const properties = feature.properties;
+
+      // If excluding nulls and the property value is null, skip it
+      if (excludeNulls) {
+        for (const key in properties) {
+          if (properties[key] === null) {
+            delete properties[key];
+          }
+        }
+      }
+
+      let currentLevel = resultJson;
+      selectedFields.forEach((field, index) => {
+        if (!currentLevel[field].some(item => item[field] === properties[field])) {
+          const newLevel = {[field]: properties[field]};
+          currentLevel[field].push(newLevel);
+          if (index !== selectedFields.length - 1) {
+            newLevel[selectedFields[index + 1]] = [];
+          }
+          currentLevel = newLevel;
+        } else {
+          currentLevel = currentLevel[field].find(item => item[field] === properties[field]);
+        }
+      });
+    });
+
+    // Display the result as JSON
+    document.getElementById('outputJson').textContent = JSON.stringify(resultJson, null, 2);
+  }
+
+  // Download JSON as file
+  function downloadJSON() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(resultJson, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('download', 'output.json');
+    downloadAnchor.click();
+  }
+</script>
+
+</body>
+</html>
